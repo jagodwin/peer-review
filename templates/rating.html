@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Group Rating</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <style>
+        /* General styling */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* Center the dev and report values */
+        td .dev-value, td .report-value {
+            display: block; /* Treat the span as a block-level element */
+            text-align: center; /* Center the text */
+            width: 100%;  /* Make the span fill the available width */
+        }
+
+
+        input[type="text"] {
+            width: 100%;  /* Make the input fill the available width */
+            padding: 8px;  /* Add some padding for better readability */
+            font-size: 14px;  /* Set a comfortable font size */
+            box-sizing: border-box;  /* Ensure padding doesn't overflow the input */
+        }
+
+        /* Styling for disabled export button */
+        #exportButton[disabled] {
+            background-color: #d3d3d3;
+            color: #888;
+            cursor: not-allowed;
+        }
+
+        /* Styling for active export button */
+        #exportButton {
+            background-color: #4CAF50; /* Green background */
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+    </style>
+</head>
+<body>
+    <h2>Rate Your Group Members</h2>
+
+    <p>Please provide accurate and descriptive ratings for each of your group members.
+        This form will help you ensure that your ratings are in the correct format and sum to 100. Don't forget to
+        select your name so we know who is doing the reviewing. While the comment boxes do not check length, make sure
+    that you are providing meaningful explanations for your ratings, especially for scores that deviate significantly from
+    the expected value. Submissions with mostly copy-pasted or empty boxes will be not be accepted and will result in a zero.</p>
+
+    <!-- Group Selection Dropdown -->
+    <label for="groupSelect">Select Group:</label>
+    <select id="groupSelect">
+        <option value="">--Select Group--</option>
+        {% for group in groups.keys() %}
+            <option value="{{ group }}">{{ group }}</option>
+        {% endfor %}
+    </select>
+
+    <!-- Reviewer Selection Dropdown -->
+    <label for="reviewerSelect">Select Your Name:</label>
+    <select id="reviewerSelect">
+        <option value="">--Select Reviewer--</option>
+    </select>
+
+    <!-- Dynamic Rating Table -->
+    <table border="1" id="ratingTable" style="margin-top: 20px; display: none;">
+        <thead>
+            <tr>
+                <th>Member Name</th>
+                <th>Dev</th>
+                <th>Dev Value</th>
+                <th>Report</th>
+                <th>Report Value</th>
+                <th>Dev Comments</th>
+                <th>Report Comments</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <!-- Rows will be inserted here by JavaScript -->
+        </tbody>
+    </table>
+    <div style="margin-top: 20px;">
+        <strong>Dev Total: </strong><span id="devTotal">0</span>
+    </div>
+    <div>
+        <strong>Report Total: </strong><span id="reportTotal">0</span>
+    </div>
+
+    <button id="exportButton" style="margin-top: 20px;" disabled>Export as CSV</button>
+</body>
+</html>
