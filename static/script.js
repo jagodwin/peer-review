@@ -84,11 +84,12 @@ $(document).ready(function() {
                     return;
                 }
 
+                // TODO - modify the values to account for commas and returns that mess up csv format
                 // If it's the "Dev Comments" or "Report Comments" columns, get the input field value
                 if (index === 5) {  // "Dev Comments" column (6th column, index 5)
-                    rowData.push(cell.querySelector("input").value);
+                    rowData.push('"' + cell.querySelector("input").value + '"');
                 } else if (index === 6) {  // "Report Comments" column (7th column, index 6)
-                    rowData.push(cell.querySelector("input").value);
+                    rowData.push('"' +cell.querySelector("input").value+ '"');
                 } else {
                     // For other columns, just add the innerText (Dev/Report slider values, member names)
                     rowData.push(cell.innerText);
