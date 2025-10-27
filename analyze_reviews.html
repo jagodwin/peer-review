@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peer Review Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+<style>
+  body {
+    font-family: sans-serif;
+    margin: 2rem;
+    background: #fafafa;
+  }
+  h1 { text-align: center; }
+  input[type=file] {
+    display: block;
+    margin: 1rem auto;
+    font-size: 1rem;
+  }
+  .chart-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+  }
+  canvas {
+    width: 100% !important;
+    height: 400px !important;
+  }
+  details {
+    margin-top: 0.5rem;
+    padding-left: 1rem;
+  }
+  summary {
+    cursor: pointer;
+    font-weight: bold;
+    margin-bottom: 0.3rem;
+  }
+  ul { margin-top: 0.2rem; margin-bottom: 0.5rem; }
+</style>
+</head>
+<body>
+
+<h1>Peer Review Dashboard</h1>
+<p>Upload one or more CSV files:</p>
+<input type="file" id="fileInput" multiple accept=".csv" />
+<div id="charts"></div>
+
+<script>
+document.getElementById('fileInput').addEventListener('change', handleFiles);
+
+function handleFiles(event) {
+  const files = event.target.files;
+  if (!files.length) return;
+
+  const allRows = [];
+  let processed = 0;
+
+  for (const file of files) {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        allRows.push(...results.data);
+        processed++;
+        if (processed === files.length) buildDashboard(allRows);
+      }
+    });
+  }
+}
+
+function buildDashboard(data) {
+  const groups = {};
+  data.forEach(row => {
+    const group = row["Group Name"]?.trim();
+    if (!group) return;
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(row);
+  });
+
+  const chartsDiv = document.getElementById("charts");
+  chartsDiv.innerHTML = "";
+
+  for (const [groupName, rows] of Object.entries(groups)) {
+    const members = {};
+    rows.forEach(r => {
+      const member = r["Member Name"]?.trim();
+      if (!member) return;
+      if (!members[member]) members[member] = { devScores: [], reportScores: [], devComments: [], reportComments: [] };
+      if (r["Dev Value"]) members[member].devScores.push(Number(r["Dev Value"]));
+      if (r["Report Value"]) members[member].reportScores.push(Number(r["Report Value"]));
+      if (r["Dev Comments"]) members[member].devComments.push(r["Dev Comments"]);
+      if (r["Report Comments"]) members[member].reportComments.push(r["Report Comments"]);
+    });
+
+    const memberNames = Object.keys(members);
+    const devAverages = memberNames.map(m => avg(members[m].devScores));
+    const reportAverages = memberNames.map(m => avg(members[m].reportScores));
+    const expected = 100 / memberNames.length;
+
+    // Chart container
+    const container = document.createElement("div");
+    container.className = "chart-container";
+    const title = document.createElement("h2");
+    title.textContent = groupName;
+    const canvas = document.createElement("canvas");
+    container.appendChild(title);
+    container.appendChild(canvas);
+    chartsDiv.appendChild(container);
+
+    // Chart.js
+    new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: memberNames,
+        datasets: [
+          { label: "Dev Avg", data: devAverages, backgroundColor: "rgba(75, 192, 192, 0.6)" },
+          { label: "Report Avg", data: reportAverages, backgroundColor: "rgba(153, 102, 255, 0.6)" },
+          { label: "Expected", data: memberNames.map(() => expected), type: "line", borderColor: "red", borderWidth: 2, pointRadius: 0, borderDash: [5,5], fill: false }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, max: 100 } },
+        plugins: { legend: { position: 'bottom' }, title: { display: true, text: `Average Dev/Report Scores` } }
+      }
+    });
+
+    // Member details with collapsible comments
+    for (const [member, data] of Object.entries(members)) {
+      const detail = document.createElement("details");
+      detail.innerHTML = `<summary>${member} — Dev Avg: ${avg(data.devScores).toFixed(1)}, Report Avg: ${avg(data.reportScores).toFixed(1)}</summary>
+        ${data.devComments.length ? `<p><strong>Dev Comments:</strong></p><ul>${data.devComments.map(c=>`<li>${c}</li>`).join('')}</ul>` : ''}
+        ${data.reportComments.length ? `<p><strong>Report Comments:</strong></p><ul>${data.reportComments.map(c=>`<li>${c}</li>`).join('')}</ul>` : ''}
+      `;
+      container.appendChild(detail);
+    }
+  }
+}
+
+function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+</script>
+
+</body>
+</html>
