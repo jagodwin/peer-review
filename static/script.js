@@ -1,180 +1,153 @@
 $(document).ready(function() {
-    // Handle Group Selection Change
-    $("#groupSelect").change(function() {
-        const groupName = $(this).val();
-        if (groupName) {
-            // Trigger AJAX call if a group is selected
-            $.ajax({
-                url: '/get_members',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ group_name: groupName }),
-                success: function(members) {
-                    const groupSize = members.length;
-                    const sliderMax = (100 / groupSize) * 2;
+    let groupMap = {}; // { groupName: [member1, member2, ...] }
 
-                    // Populate reviewer dropdown and table
-                    let reviewerSelect = $("#reviewerSelect");
-                    reviewerSelect.empty().append('<option value="">--Select Reviewer--</option>');
-                    members.forEach(member => {
-                        reviewerSelect.append(`<option value="${member}">${member}</option>`);
-                    });
+    $('#groupSelect, #reviewerSelect, #exportButton').prop('disabled', true);
 
-                    // Show the rating table and populate it with the new slider range
-                    let tableBody = $("#tableBody");
-                    tableBody.empty();
-                    members.forEach(member => {
-                        tableBody.append(`
-                            <tr>
-                                <td>${member}</td>
-                                <td><input type="range" min="0" max="${sliderMax}" value="0" class="slider dev-slider" data-member="${member}"></td>
-                                <td><span class="dev-value" id="devValue-${member}">0</span></td>
-                                <td><input type="range" min="0" max="${sliderMax}" value="0" class="slider report-slider" data-member="${member}"></td>
-                                <td><span class="report-value" id="reportValue-${member}">0</span></td>
-                                <td><input type="text" placeholder="Dev Comments" name="devComment-${member}"></td>
-                                <td><input type="text" placeholder="Report Comments" name="reportComment-${member}"></td>
-                            </tr>
-                        `);
-                    });
+    $('#csvUpload').on('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
 
-                    // Show the table and reset totals
-                    $("#ratingTable").show();
-                    updateSums();  // Reset the totals to reflect the initial state
-                }
-            });
-        }
-    });
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const lines = event.target.result.split(/\r?\n/).filter(line => line.trim() !== '');
+            groupMap = {};
 
-
-    // Update displayed value when sliders are changed
-    $(document).on('input', '.dev-slider', function() {
-        const member = $(this).data("member");
-        $(`#devValue-${member}`).text($(this).val());
-    });
-    $(document).on('input', '.report-slider', function() {
-        const member = $(this).data("member");
-        $(`#reportValue-${member}`).text($(this).val());
-    });
-
-    // Function to export table data as CSV with reviewer name included
-    function exportTableToCSV(filename) {
-        let csv = [];
-        let reviewer = $("#reviewerSelect").val();  // Get selected reviewer
-        let rows = document.querySelectorAll("#ratingTable tr");
-
-        // Add header row with "Reviewer" column
-        let headerRow = ["Reviewer"];
-        rows[0].querySelectorAll("th").forEach((th, index) => {
-            // Skip "Dev" and "Report" columns if they are empty
-            if (index !== 1 && index !== 3) {  // Skipping 2nd (Dev) and 4th (Report) columns
-                headerRow.push(th.innerText);
-            }
-        });
-        csv.push(headerRow.join(","));
-
-        // Loop through each row in the table to get data
-        for (let i = 1; i < rows.length; i++) {
-            let rowData = [reviewer];  // Start each row with the reviewer's name
-            let cells = rows[i].querySelectorAll("td");
-
-            // Add each cell's text to the row data, skipping empty Dev and Report slider columns
-            cells.forEach((cell, index) => {
-                if (index === 1 || index === 3) {
-                    // Skip the "Dev" and "Report" slider columns (we will handle their values separately)
-                    return;
-                }
-
-                // TODO - modify the values to account for commas and returns that mess up csv format
-                // If it's the "Dev Comments" or "Report Comments" columns, get the input field value
-                if (index === 5) {  // "Dev Comments" column (6th column, index 5)
-                    rowData.push('"' + cell.querySelector("input").value + '"');
-                } else if (index === 6) {  // "Report Comments" column (7th column, index 6)
-                    rowData.push('"' +cell.querySelector("input").value+ '"');
-                } else {
-                    // For other columns, just add the innerText (Dev/Report slider values, member names)
-                    rowData.push(cell.innerText);
+            lines.forEach(line => {
+                const parts = line.split(',').map(s => s.trim());
+                if (parts.length >= 2) {
+                    const name = parts[0];
+                    const group = parts[1];
+                    if (!groupMap[group]) groupMap[group] = [];
+                    groupMap[group].push(name);
                 }
             });
 
-            csv.push(rowData.join(","));
-        }
-
-        // Create a Blob from the CSV string
-        let csvFile = new Blob([csv.join("\n")], { type: "text/csv" });
-
-        // Create a link to download the Blob as a file
-        let downloadLink = document.createElement("a");
-        downloadLink.href = URL.createObjectURL(csvFile);
-        downloadLink.download = filename;
-
-        // Trigger the download
-        downloadLink.click();
-    }
-
-    // Attach event listener to the export button
-    document.getElementById("exportButton").addEventListener("click", function () {
-        if($("#reviewerSelect").val())
-            exportTableToCSV($("#reviewerSelect").val() + "-peer_review.csv");
-        else{
-            alert('Reviewer must be selected. Please select your name from the drop down before exporting.')
-        }
+            const groupSelect = $('#groupSelect');
+            groupSelect.empty().append('<option value="">--Select Group--</option>');
+            Object.keys(groupMap).forEach(group => {
+                groupSelect.append(`<option value="${group}">${group}</option>`);
+            });
+            groupSelect.prop('disabled', false);
+        };
+        reader.readAsText(file);
     });
 
-    // Function to update the totals for Dev and Report columns and change color based on the sum
-    function updateSums() {
+    $('#groupSelect').on('change', function() {
+        const group = $(this).val();
+        const reviewerSelect = $('#reviewerSelect');
+        reviewerSelect.empty().append('<option value="">--Select Reviewer--</option>');
+
+        if (group && groupMap[group]) {
+            groupMap[group].forEach(name => {
+                reviewerSelect.append(`<option value="${name}">${name}</option>`);
+            });
+            reviewerSelect.prop('disabled', false);
+        } else {
+            reviewerSelect.prop('disabled', true);
+        }
+
+        $('#tableBody').empty();
+        $('#ratingTable').hide();
+        $('#devTotal').text('0');
+        $('#reportTotal').text('0');
+        $('#exportButton').prop('disabled', true);
+    });
+
+    $('#reviewerSelect').on('change', function() {
+        const group = $('#groupSelect').val();
+        const members = groupMap[group]
+        const tableBody = $('#tableBody');
+        tableBody.empty();
+
+        if (members.length > 0) {
+            members.forEach(member => {
+                tableBody.append(`
+                    <tr>
+                        <td>${member}</td>
+                        <td><input type="range" min="0" max="100" value="0" class="slider dev-slider" data-member="${member}"></td>
+                        <td><span class="dev-value" id="devValue-${member}">0</span></td>
+                        <td><input type="range" min="0" max="100" value="0" class="slider report-slider" data-member="${member}"></td>
+                        <td><span class="report-value" id="reportValue-${member}">0</span></td>
+                        <td><input type="text" placeholder="Dev Comments" name="devComment-${member}" class="comment-box"></td>
+                        <td><input type="text" placeholder="Report Comments" name="reportComment-${member}" class="comment-box"></td>
+                    </tr>
+                `);
+            });
+
+            $('#ratingTable').show();
+            $('#exportButton').prop('disabled', false);
+        } else {
+            $('#ratingTable').hide();
+            $('#exportButton').prop('disabled', true);
+        }
+
+        updateTotals();
+    });
+
+    $(document).on('input', '.slider', function() {
+        const member = $(this).data('member');
+        if ($(this).hasClass('dev-slider')) {
+            $(`#devValue-${member}`).text($(this).val());
+        } else {
+            $(`#reportValue-${member}`).text($(this).val());
+        }
+        updateTotals();
+    });
+
+    $(document).on('input', '.comment-box', function() {
+        this.value = this.value.replace(/\r?\n/g, ' ');
+        if (this.value.length > 500) this.value = this.value.slice(0, 500);
+    });
+
+    function updateTotals() {
         let devTotal = 0;
         let reportTotal = 0;
+        $('.dev-slider').each(function() { devTotal += parseInt($(this).val()); });
+        $('.report-slider').each(function() { reportTotal += parseInt($(this).val()); });
+        $('#devTotal').text(devTotal);
+        $('#reportTotal').text(reportTotal);
 
-        // Loop through each row and add up the Dev and Report values
-        $("#ratingTable tbody tr").each(function () {
-            let devValue = parseFloat($(this).find(".dev-slider").val()) || 0;
-            let reportValue = parseFloat($(this).find(".report-slider").val()) || 0;
-
-            devTotal += devValue;
-            reportTotal += reportValue;
-        });
-
-        // Update the total display for Dev and Report columns
-        $("#devTotal").text(devTotal);
-        $("#reportTotal").text(reportTotal);
-        let dev_valid = false
-        let report_valid = false
-        if (devTotal < 100 || devTotal > 100){
-            $("#devTotal").css("color", "red");
-            $("#exportButton").prop("disabled", true);
-        }
-        else {
-            $("#devTotal").css("color", "green");
-            dev_valid = true
-        }
-
-         if (reportTotal < 100 || reportTotal > 100){
-            $("#reportTotal").css("color", "red");
-            $("#exportButton").prop("disabled", true)
-         }
-         else {
-             $("#reportTotal").css("color", "green");
-             report_valid = true
-         }
-
-         if (dev_valid && report_valid){
-            $("#exportButton").prop("disabled", false);
-         }
-
+        $('#devTotal').css('color', devTotal === 100 ? 'black' : 'red');
+        $('#reportTotal').css('color', reportTotal === 100 ? 'black' : 'red');
     }
 
+    $('#exportButton').on('click', function() {
+        const reviewer = $('#reviewerSelect').val();
+        const groupName = $('#groupSelect').val();
+        let csvRows = [];
+        csvRows.push(['Reviewer','Group Name','Member Name','Dev Value','Report Value','Dev Comments','Report Comments'].join(','));
 
-    // Update displayed value and sums when sliders are changed
-    $(document).on('input', '.dev-slider', function() {
-        const member = $(this).data("member");
-        $(`#devValue-${member}`).text($(this).val());
-        updateSums();  // Recalculate sums
+        $('#tableBody tr').each(function() {
+            const cols = $(this).find('td');
+            const row = [
+                reviewer,
+                groupName,
+                $(cols[0]).text(),
+                $(cols[1]).find('input').val(),
+                $(cols[3]).find('input').val(),
+                $(cols[5]).find('input').val(),
+                $(cols[6]).find('input').val()
+            ].map(formatCSVField);
+            csvRows.push(row.join(','));
+        });
+
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'ratings.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     });
 
-    $(document).on('input', '.report-slider', function() {
-        const member = $(this).data("member");
-        $(`#reportValue-${member}`).text($(this).val());
-        updateSums();  // Recalculate sums
-    });
-
+    function formatCSVField(value) {
+        if (value == null) return '';
+        let str = String(value);
+        str = str.replace(/\r?\n/g, ' ');
+        if (/[,"]/.test(str)) {
+            return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+    }
 });
