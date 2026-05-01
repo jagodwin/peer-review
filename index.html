@@ -98,59 +98,9 @@
     <div>
         <strong>Report Total: </strong><span id="reportTotal">0</span>
     </div>
+    <div id="validationMessage" style="margin-top: 10px; color: #b00020;"></div>
 
     <button id="exportButton" style="margin-top: 20px;" disabled>Export as CSV</button>
 
-
-<script>
-        let groupMap = {}; // { groupName: [member1, member2,...] }
-
-        // --- Parse uploaded CSV and populate dropdowns ---
-        $("#csvUpload").on("change", function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const lines = event.target.result.split(/\r?\n/).filter(line => line.trim() !== "");
-                groupMap = {};
-
-                lines.forEach(line => {
-                    const parts = line.split(",").map(s => s.trim());
-                    if (parts.length >= 2) {
-                        const name = parts[0];
-                        const group = parts[1];
-                        if (!groupMap[group]) groupMap[group] = [];
-                        groupMap[group].push(name);
-                    }
-                });
-
-                // Populate group dropdown
-                const groupSelect = $("#groupSelect");
-                groupSelect.empty().append('<option value="">--Select Group--</option>');
-                Object.keys(groupMap).forEach(group => {
-                    groupSelect.append(`<option value="${group}">${group}</option>`);
-                });
-                groupSelect.prop("disabled", false);
-            };
-            reader.readAsText(file);
-        });
-
-        // --- When group selected, populate reviewer dropdown ---
-        $("#groupSelect").on("change", function() {
-            const group = $(this).val();
-            const reviewerSelect = $("#reviewerSelect");
-            reviewerSelect.empty().append('<option value="">--Select Reviewer--</option>');
-
-            if (group && groupMap[group]) {
-                groupMap[group].forEach(name => {
-                    reviewerSelect.append(`<option value="${name}">${name}</option>`);
-                });
-                reviewerSelect.prop("disabled", false);
-            } else {
-                reviewerSelect.prop("disabled", true);
-            }
-        });
-    </script>
 </body>
 </html>

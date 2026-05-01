@@ -28,6 +28,7 @@ $(document).ready(function() {
                 groupSelect.append(`<option value="${group}">${group}</option>`);
             });
             groupSelect.prop('disabled', false);
+            updateExportState();
         };
         reader.readAsText(file);
     });
@@ -50,16 +51,24 @@ $(document).ready(function() {
         $('#ratingTable').hide();
         $('#devTotal').text('0');
         $('#reportTotal').text('0');
-        $('#exportButton').prop('disabled', true);
+        $('#validationMessage').text('');
+        updateExportState();
     });
 
     $('#reviewerSelect').on('change', function() {
         const group = $('#groupSelect').val();
-        const members = groupMap[group]
+        const reviewer = $(this).val();
+        const members = groupMap[group] || [];
         const tableBody = $('#tableBody');
-        tableBody.empty();
 
-        if (members.length > 0) {
+        if (!reviewer) {
+            tableBody.empty();
+            $('#ratingTable').hide();
+            updateTotals();
+            return;
+        }
+
+        if (members.length > 0 && tableBody.children().length === 0) {
             members.forEach(member => {
                 tableBody.append(`
                     <tr>
@@ -73,14 +82,9 @@ $(document).ready(function() {
                     </tr>
                 `);
             });
-
-            $('#ratingTable').show();
-            $('#exportButton').prop('disabled', false);
-        } else {
-            $('#ratingTable').hide();
-            $('#exportButton').prop('disabled', true);
         }
 
+        $('#ratingTable').toggle(members.length > 0);
         updateTotals();
     });
 
@@ -97,6 +101,7 @@ $(document).ready(function() {
     $(document).on('input', '.comment-box', function() {
         this.value = this.value.replace(/\r?\n/g, ' ');
         if (this.value.length > 500) this.value = this.value.slice(0, 500);
+        updateExportState();
     });
 
     function updateTotals() {
@@ -109,9 +114,15 @@ $(document).ready(function() {
 
         $('#devTotal').css('color', devTotal === 100 ? 'black' : 'red');
         $('#reportTotal').css('color', reportTotal === 100 ? 'black' : 'red');
+        updateExportState();
     }
 
     $('#exportButton').on('click', function() {
+        if (!isSubmissionValid()) {
+            updateExportState();
+            return;
+        }
+
         const reviewer = $('#reviewerSelect').val();
         const groupName = $('#groupSelect').val();
         let csvRows = [];
@@ -149,5 +160,55 @@ $(document).ready(function() {
             return '"' + str.replace(/"/g, '""') + '"';
         }
         return str;
+    }
+
+    function isSubmissionValid() {
+        const reviewer = $('#reviewerSelect').val();
+        const group = $('#groupSelect').val();
+        const memberRows = $('#tableBody tr');
+        const devTotal = Number($('#devTotal').text());
+        const reportTotal = Number($('#reportTotal').text());
+
+        if (!group || !reviewer || memberRows.length === 0) return false;
+        if (devTotal !== 100 || reportTotal !== 100) return false;
+
+        let allCommentsPresent = true;
+        memberRows.each(function() {
+            $(this).find('.comment-box').each(function() {
+                if (!$(this).val().trim()) {
+                    allCommentsPresent = false;
+                    return false;
+                }
+            });
+
+            if (!allCommentsPresent) return false;
+        });
+
+        return allCommentsPresent;
+    }
+
+    function updateExportState() {
+        const reviewer = $('#reviewerSelect').val();
+        const group = $('#groupSelect').val();
+        const memberRows = $('#tableBody tr');
+        const devTotal = Number($('#devTotal').text());
+        const reportTotal = Number($('#reportTotal').text());
+        const messageEl = $('#validationMessage');
+        const issues = [];
+
+        if (!group) issues.push('Select a group.');
+        if (!reviewer) issues.push('Select your name.');
+        if (memberRows.length === 0 && group && reviewer) issues.push('Review rows did not load.');
+        if (memberRows.length > 0) {
+            const hasBlankComments = $('.comment-box').toArray().some(input => !input.value.trim());
+            if (hasBlankComments) issues.push('Complete every comment box before exporting.');
+        }
+        if (devTotal !== 100) issues.push(`Dev total must equal 100. Current total: ${devTotal}.`);
+        if (reportTotal !== 100) issues.push(`Report total must equal 100. Current total: ${reportTotal}.`);
+
+        const isValid = issues.length === 0 && isSubmissionValid();
+        $('#exportButton').prop('disabled', !isValid);
+        messageEl.text(isValid ? 'Submission is ready to export.' : issues.join(' '));
+        messageEl.css('color', isValid ? '#1b5e20' : '#b00020');
     }
 });
