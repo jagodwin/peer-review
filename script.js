@@ -7,30 +7,24 @@ $(document).ready(function() {
         const file = e.target.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const lines = event.target.result.split(/\r?\n/).filter(line => line.trim() !== '');
-            groupMap = {};
-
-            lines.forEach(line => {
-                const parts = line.split(',').map(s => s.trim());
-                if (parts.length >= 2) {
-                    const name = parts[0];
-                    const group = parts[1];
-                    if (!groupMap[group]) groupMap[group] = [];
-                    groupMap[group].push(name);
-                }
-            });
-
-            const groupSelect = $('#groupSelect');
-            groupSelect.empty().append('<option value="">--Select Group--</option>');
-            Object.keys(groupMap).forEach(group => {
-                groupSelect.append(`<option value="${group}">${group}</option>`);
-            });
-            groupSelect.prop('disabled', false);
-            updateExportState();
-        };
-        reader.readAsText(file);
+        Papa.parse(file, {
+            skipEmptyLines: true,
+            complete: function(results) {
+                groupMap = CsvUtils.parseRosterRows(results.data || []);
+                const groupSelect = $('#groupSelect');
+                groupSelect.empty().append('<option value="">--Select Group--</option>');
+                Object.keys(groupMap).forEach(group => {
+                    groupSelect.append(`<option value="${group}">${group}</option>`);
+                });
+                groupSelect.prop('disabled', Object.keys(groupMap).length === 0);
+                $('#reviewerSelect').empty().append('<option value="">--Select Reviewer--</option>').prop('disabled', true);
+                $('#tableBody').empty();
+                $('#ratingTable').hide();
+                $('#devTotal').text('0');
+                $('#reportTotal').text('0');
+                updateExportState();
+            }
+        });
     });
 
     $('#groupSelect').on('change', function() {
@@ -146,7 +140,7 @@ $(document).ready(function() {
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = 'ratings.csv';
+        link.download = `${groupName}_${reviewer}.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
