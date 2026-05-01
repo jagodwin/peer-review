@@ -6,28 +6,39 @@
 <title>Peer Review Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="csv-utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <style>
   body {
     font-family: sans-serif;
     margin: 2rem;
     background: #fafafa;
+    color: #222;
   }
-  h1 { text-align: center; }
+  h1 {
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
   input[type=file] {
     display: block;
     margin: 1rem auto;
     font-size: 1rem;
   }
-  .status-panel {
+  .status-panel,
+  .group-section,
+  .chart-panel,
+  .comments-panel {
     background: white;
     padding: 1rem;
     border-radius: 12px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .status-panel,
+  .group-section {
     margin-bottom: 2rem;
   }
-  .status-panel h2 {
+  .status-panel h2,
+  .group-header h2,
+  .comments-panel h3 {
     margin-top: 0;
   }
   .status-panel ul {
@@ -39,27 +50,114 @@
   .status-bad {
     color: #b00020;
   }
-  .chart-container {
-    background: white;
-    padding: 1rem;
-    border-radius: 12px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 2rem;
+  .group-header {
+    margin-bottom: 1rem;
   }
-  canvas {
-    width: 100% !important;
-    height: 400px !important;
+  .group-layout {
+    display: grid;
+    gap: 1rem;
   }
-  details {
-    margin-top: 0.5rem;
-    padding-left: 1rem;
+  .chart-panel {
+    overflow-x: auto;
   }
-  summary {
-    cursor: pointer;
-    font-weight: bold;
-    margin-bottom: 0.3rem;
+  .chart-shell {
+    min-width: 720px;
   }
-  ul { margin-top: 0.2rem; margin-bottom: 0.5rem; }
+  .chart-title {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .chart-legend {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    font-size: 0.95rem;
+  }
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    display: inline-block;
+  }
+  .legend-line {
+    width: 18px;
+    height: 0;
+    border-top: 2px dashed #d32f2f;
+    display: inline-block;
+  }
+  .chart-axis text,
+  .expected-label,
+  .lane-label,
+  .summary-label {
+    fill: #333;
+    font-size: 12px;
+  }
+  .chart-axis path,
+  .chart-axis line,
+  .grid-line {
+    stroke: #d0d0d0;
+  }
+  .expected-line {
+    stroke: #d32f2f;
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+  }
+  .range-line {
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .mean-marker {
+    stroke: #222;
+    stroke-width: 2;
+  }
+  .review-dot {
+    stroke: white;
+    stroke-width: 1.5;
+  }
+  .member-comments + .member-comments {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e3e3e3;
+  }
+  .member-comments h4 {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+  }
+  .comment-columns {
+    display: grid;
+    gap: 1rem;
+  }
+  .comment-column h5 {
+    margin: 0 0 0.35rem;
+    font-size: 0.95rem;
+  }
+  .comments-panel ul {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 1.25rem;
+  }
+  .comments-panel p {
+    margin: 0;
+    color: #666;
+    font-size: 0.95rem;
+  }
+  @media (min-width: 960px) {
+    .group-layout {
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+      align-items: start;
+    }
+    .comment-columns {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
 </style>
 </head>
 <body>
@@ -71,7 +169,11 @@
 <div id="charts"></div>
 
 <script>
-document.getElementById('fileInput').addEventListener('change', handleFiles);
+const DEV_COLOR = "#2a9d8f";
+const REPORT_COLOR = "#7b61c9";
+const EXPECTED_COLOR = "#d32f2f";
+
+document.getElementById("fileInput").addEventListener("change", handleFiles);
 
 function handleFiles(event) {
   const files = event.target.files;
@@ -87,7 +189,7 @@ function handleFiles(event) {
       header: true,
       skipEmptyLines: true,
       transformHeader: header => header.trim(),
-      complete: (results) => {
+      complete: results => {
         const validation = CsvUtils.validateSubmissionResults(results);
         if (validation.isValid) {
           allRows.push(...validation.rows);
@@ -95,6 +197,7 @@ function handleFiles(event) {
         } else {
           rejectedFiles.push({ name: file.name, errors: validation.errors });
         }
+
         processed++;
         if (processed === files.length) {
           renderStatus(acceptedFiles, rejectedFiles, allRows.length);
@@ -119,63 +222,296 @@ function buildDashboard(data) {
 
   for (const [groupName, rows] of Object.entries(groups)) {
     const members = {};
-    rows.forEach(r => {
-      const member = r["Member Name"]?.trim();
+    rows.forEach(row => {
+      const member = row["Member Name"]?.trim();
       if (!member) return;
-      if (!members[member]) members[member] = { devScores: [], reportScores: [], devComments: [], reportComments: [] };
-      if (r["Dev Value"] !== null && r["Dev Value"] !== undefined) members[member].devScores.push(r["Dev Value"]);
-      if (r["Report Value"] !== null && r["Report Value"] !== undefined) members[member].reportScores.push(r["Report Value"]);
-      if (r["Dev Comments"]) members[member].devComments.push(r["Dev Comments"]);
-      if (r["Report Comments"]) members[member].reportComments.push(r["Report Comments"]);
+
+      if (!members[member]) {
+        members[member] = {
+          devScores: [],
+          reportScores: [],
+          devComments: [],
+          reportComments: []
+        };
+      }
+
+      if (row["Dev Value"] !== null && row["Dev Value"] !== undefined) {
+        members[member].devScores.push(row["Dev Value"]);
+      }
+      if (row["Report Value"] !== null && row["Report Value"] !== undefined) {
+        members[member].reportScores.push(row["Report Value"]);
+      }
+      if (row["Dev Comments"]) members[member].devComments.push(row["Dev Comments"]);
+      if (row["Report Comments"]) members[member].reportComments.push(row["Report Comments"]);
     });
 
     const memberNames = Object.keys(members);
-    const devAverages = memberNames.map(m => avg(members[m].devScores));
-    const reportAverages = memberNames.map(m => avg(members[m].reportScores));
+    if (!memberNames.length) continue;
+
+    const memberData = memberNames.map(member => ({
+      member,
+      devAvg: avg(members[member].devScores),
+      reportAvg: avg(members[member].reportScores),
+      devScores: members[member].devScores,
+      reportScores: members[member].reportScores,
+      devComments: members[member].devComments,
+      reportComments: members[member].reportComments
+    }));
     const expected = 100 / memberNames.length;
 
-    // Chart container
-    const container = document.createElement("div");
-    container.className = "chart-container";
+    const section = document.createElement("section");
+    section.className = "group-section";
+
+    const header = document.createElement("div");
+    header.className = "group-header";
     const title = document.createElement("h2");
     title.textContent = groupName;
-    const canvas = document.createElement("canvas");
-    container.appendChild(title);
-    container.appendChild(canvas);
-    chartsDiv.appendChild(container);
+    header.appendChild(title);
+    section.appendChild(header);
 
-    // Chart.js
-    new Chart(canvas.getContext("2d"), {
-      type: "bar",
-      data: {
-        labels: memberNames,
-        datasets: [
-          { label: "Dev Avg", data: devAverages, backgroundColor: "rgba(75, 192, 192, 0.6)" },
-          { label: "Report Avg", data: reportAverages, backgroundColor: "rgba(153, 102, 255, 0.6)" },
-          { label: "Expected", data: memberNames.map(() => expected), type: "line", borderColor: "red", borderWidth: 2, pointRadius: 0, borderDash: [5,5], fill: false }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true, max: 100 } },
-        plugins: { legend: { position: 'bottom' }, title: { display: true, text: `Average Dev/Report Scores` } }
-      }
-    });
+    const layout = document.createElement("div");
+    layout.className = "group-layout";
 
-    // Member details with collapsible comments
-    for (const [member, data] of Object.entries(members)) {
-      const detail = document.createElement("details");
-      detail.innerHTML = `<summary>${member} — Dev Avg: ${avg(data.devScores).toFixed(1)}, Report Avg: ${avg(data.reportScores).toFixed(1)}</summary>
-        ${data.devComments.length ? `<p><strong>Dev Comments:</strong></p><ul>${data.devComments.map(c=>`<li>${c}</li>`).join('')}</ul>` : ''}
-        ${data.reportComments.length ? `<p><strong>Report Comments:</strong></p><ul>${data.reportComments.map(c=>`<li>${c}</li>`).join('')}</ul>` : ''}
-      `;
-      container.appendChild(detail);
-    }
+    const chartPanel = document.createElement("div");
+    chartPanel.className = "chart-panel";
+    const chartTitle = document.createElement("p");
+    chartTitle.className = "chart-title";
+    chartTitle.textContent = "Average dev and report scores";
+    chartPanel.appendChild(chartTitle);
+
+    const chartShell = document.createElement("div");
+    chartShell.className = "chart-shell";
+    chartPanel.appendChild(chartShell);
+    renderGroupChart(chartShell, memberData, expected);
+    chartPanel.appendChild(buildLegend());
+
+    const commentsPanel = document.createElement("div");
+    commentsPanel.className = "comments-panel";
+    const commentsTitle = document.createElement("h3");
+    commentsTitle.textContent = "Reviewer Comments";
+    commentsPanel.appendChild(commentsTitle);
+    memberData.forEach(member => commentsPanel.appendChild(buildMemberCommentsBlock(member)));
+
+    layout.appendChild(chartPanel);
+    layout.appendChild(commentsPanel);
+    section.appendChild(layout);
+    chartsDiv.appendChild(section);
   }
 }
 
-function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+function renderGroupChart(container, memberData, expected) {
+  const margin = { top: 16, right: 104, bottom: 32, left: 164 };
+  const rowHeight = 56;
+  const width = 860;
+  const height = margin.top + margin.bottom + memberData.length * rowHeight;
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const svg = d3.select(container)
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("role", "img")
+    .attr("aria-label", "Grouped bar chart of average dev and report peer review scores");
+
+  const root = svg.append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const y = d3.scaleBand()
+    .domain(memberData.map(d => d.member))
+    .range([0, innerHeight])
+    .paddingInner(0.26);
+
+  const yInner = d3.scaleBand()
+    .domain(["devScores", "reportScores"])
+    .range([0, y.bandwidth()])
+    .padding(0.28);
+
+  const x = d3.scaleLinear()
+    .domain([0, 100])
+    .range([0, innerWidth]);
+
+  root.append("g")
+    .selectAll("line")
+    .data(d3.range(0, 101, 20))
+    .join("line")
+    .attr("class", "grid-line")
+    .attr("x1", d => x(d))
+    .attr("x2", d => x(d))
+    .attr("y1", 0)
+    .attr("y2", innerHeight);
+
+  root.append("g")
+    .attr("class", "chart-axis")
+    .attr("transform", `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d => `${d}`));
+
+  root.append("g")
+    .attr("class", "chart-axis")
+    .call(d3.axisLeft(y).tickSize(0))
+    .call(g => g.select(".domain").remove());
+
+  root.append("line")
+    .attr("class", "expected-line")
+    .attr("x1", x(expected))
+    .attr("x2", x(expected))
+    .attr("y1", 0)
+    .attr("y2", innerHeight);
+
+  root.append("text")
+    .attr("class", "expected-label")
+    .attr("x", x(expected) + 6)
+    .attr("y", -4)
+    .text(`Expected ${expected.toFixed(1)}`);
+
+  const groups = root.append("g")
+    .selectAll("g")
+    .data(memberData)
+    .join("g")
+    .attr("transform", d => `translate(0,${y(d.member)})`);
+
+  groups.append("text")
+    .attr("class", "lane-label")
+    .attr("x", -36)
+    .attr("y", () => yInner("devScores") + yInner.bandwidth() / 2 + 4)
+    .text("Dev");
+
+  groups.append("text")
+    .attr("class", "lane-label")
+    .attr("x", -36)
+    .attr("y", () => yInner("reportScores") + yInner.bandwidth() / 2 + 4)
+    .text("Rpt");
+
+  drawDistributionLane(groups, x, yInner, "devScores", "devAvg", DEV_COLOR);
+  drawDistributionLane(groups, x, yInner, "reportScores", "reportAvg", REPORT_COLOR);
+}
+
+function drawDistributionLane(groups, x, yInner, scoresKey, avgKey, color) {
+  groups.append("line")
+    .attr("class", "range-line")
+    .attr("stroke", color)
+    .attr("x1", d => x(d3.min(d[scoresKey])))
+    .attr("x2", d => x(d3.max(d[scoresKey])))
+    .attr("y1", () => yInner(scoresKey) + yInner.bandwidth() / 2)
+    .attr("y2", () => yInner(scoresKey) + yInner.bandwidth() / 2);
+
+  groups.append("line")
+    .attr("class", "mean-marker")
+    .attr("x1", d => x(d[avgKey]))
+    .attr("x2", d => x(d[avgKey]))
+    .attr("y1", () => yInner(scoresKey))
+    .attr("y2", () => yInner(scoresKey) + yInner.bandwidth());
+
+  groups.selectAll(`circle.${scoresKey}`)
+    .data(d => d[scoresKey].map(score => ({ score, avg: d[avgKey] })))
+    .join("circle")
+    .attr("class", "review-dot")
+    .attr("cx", d => x(d.score))
+    .attr("cy", () => yInner(scoresKey) + yInner.bandwidth() / 2)
+    .attr("r", 4.5)
+    .attr("fill", color);
+
+  groups.append("text")
+    .attr("class", "summary-label")
+    .attr("x", x(100) + 10)
+    .attr("y", () => yInner(scoresKey) + yInner.bandwidth() / 2 + 4)
+    .text(d => {
+      const min = d3.min(d[scoresKey]);
+      const max = d3.max(d[scoresKey]);
+      return `${d[avgKey].toFixed(1)} avg | ${min}-${max}`;
+    });
+}
+
+function buildLegend() {
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+
+  legend.appendChild(buildLegendItem("Dev Avg", "swatch", DEV_COLOR));
+  legend.appendChild(buildLegendItem("Report Avg", "swatch", REPORT_COLOR));
+  legend.appendChild(buildLegendItem("Reviewer Score", "dot", "#555"));
+  legend.appendChild(buildLegendItem("Mean", "mean"));
+  legend.appendChild(buildLegendItem("Expected Share", "line"));
+
+  return legend;
+}
+
+function buildLegendItem(labelText, type, color) {
+  const item = document.createElement("span");
+  item.className = "legend-item";
+
+  const marker = document.createElement("span");
+  if (type === "line") {
+    marker.className = "legend-line";
+  } else if (type === "dot") {
+    marker.className = "legend-swatch";
+    marker.style.backgroundColor = color;
+    marker.style.borderRadius = "999px";
+  } else if (type === "mean") {
+    marker.className = "legend-line";
+    marker.style.borderTop = "0";
+    marker.style.width = "2px";
+    marker.style.height = "14px";
+    marker.style.backgroundColor = "#222";
+  } else {
+    marker.className = "legend-swatch";
+    marker.style.backgroundColor = color;
+  }
+
+  const label = document.createElement("span");
+  label.textContent = labelText;
+
+  item.appendChild(marker);
+  item.appendChild(label);
+  return item;
+}
+
+function buildMemberCommentsBlock(member) {
+  const block = document.createElement("section");
+  block.className = "member-comments";
+
+  const heading = document.createElement("h4");
+  heading.textContent = `${member.member} - Dev Avg: ${member.devAvg.toFixed(1)}, Report Avg: ${member.reportAvg.toFixed(1)}`;
+  block.appendChild(heading);
+
+  const columns = document.createElement("div");
+  columns.className = "comment-columns";
+  columns.appendChild(buildCommentColumn("Dev Comments", member.devComments));
+  columns.appendChild(buildCommentColumn("Report Comments", member.reportComments));
+  block.appendChild(columns);
+
+  return block;
+}
+
+function buildCommentColumn(labelText, comments) {
+  const column = document.createElement("div");
+  column.className = "comment-column";
+
+  const heading = document.createElement("h5");
+  heading.textContent = labelText;
+  column.appendChild(heading);
+
+  if (!comments.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "No comments provided.";
+    column.appendChild(empty);
+    return column;
+  }
+
+  const list = document.createElement("ul");
+  comments.forEach(comment => {
+    const item = document.createElement("li");
+    item.textContent = comment;
+    list.appendChild(item);
+  });
+  column.appendChild(list);
+
+  return column;
+}
+
+function avg(arr) {
+  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+}
 
 function renderStatus(acceptedFiles, rejectedFiles, totalRows) {
   const status = document.getElementById("status");
