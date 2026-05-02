@@ -32,6 +32,22 @@
     border-radius: 12px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   }
+  .comments-panel {
+    max-height: 720px;
+    overflow-y: auto;
+    padding-right: 0.65rem;
+  }
+  .comments-panel::-webkit-scrollbar {
+    width: 10px;
+  }
+  .comments-panel::-webkit-scrollbar-thumb {
+    background: #c7c7c7;
+    border-radius: 999px;
+  }
+  .comments-panel::-webkit-scrollbar-track {
+    background: #f3f3f3;
+    border-radius: 999px;
+  }
   .status-panel,
   .group-section {
     margin-bottom: 2rem;
@@ -66,6 +82,20 @@
   .chart-title {
     margin: 0 0 0.75rem;
     font-size: 1rem;
+    font-weight: 600;
+  }
+  .histogram-stack {
+    margin-top: 1rem;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .histogram-block {
+    border-top: 1px solid #ececec;
+    padding-top: 0.75rem;
+  }
+  .histogram-title {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
     font-weight: 600;
   }
   .chart-legend {
@@ -105,6 +135,9 @@
   .grid-line {
     stroke: #d0d0d0;
   }
+  .hist-bar {
+    opacity: 0.9;
+  }
   .expected-line {
     stroke: #d32f2f;
     stroke-width: 2;
@@ -121,15 +154,76 @@
   .review-dot {
     stroke: white;
     stroke-width: 1.5;
+    cursor: pointer;
+  }
+  .chart-tooltip {
+    position: fixed;
+    z-index: 1000;
+    pointer-events: none;
+    background: rgba(24, 24, 24, 0.96);
+    color: white;
+    padding: 0.45rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    line-height: 1.3;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+    opacity: 0;
+    transition: opacity 80ms ease;
+    white-space: nowrap;
+  }
+  .chart-tooltip.visible {
+    opacity: 1;
   }
   .member-comments + .member-comments {
     margin-top: 1rem;
     padding-top: 1rem;
     border-top: 1px solid #e3e3e3;
   }
+  .member-comments {
+    position: relative;
+  }
   .member-comments h4 {
     margin: 0 0 0.75rem;
     font-size: 1rem;
+    padding-right: 2.25rem;
+  }
+  .copy-comments-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 30px;
+    height: 30px;
+    border: 1px solid #d4d4d4;
+    border-radius: 6px;
+    background: white;
+    color: #444;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+    cursor: pointer;
+  }
+  .member-comments:hover .copy-comments-button,
+  .copy-comments-button:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .copy-comments-button:hover {
+    background: #f5f5f5;
+  }
+  .copy-comments-button:focus-visible {
+    outline: 2px solid #4c8bf5;
+    outline-offset: 2px;
+  }
+  .copy-comments-button svg {
+    width: 15px;
+    height: 15px;
+  }
+  .copy-comments-button.copied {
+    color: #1b5e20;
+    border-color: #9bc7a3;
   }
   .comment-columns {
     display: grid;
@@ -172,6 +266,7 @@
 const DEV_COLOR = "#2a9d8f";
 const REPORT_COLOR = "#7b61c9";
 const EXPECTED_COLOR = "#d32f2f";
+let chartTooltip = null;
 
 document.getElementById("fileInput").addEventListener("change", handleFiles);
 
@@ -230,6 +325,8 @@ function buildDashboard(data) {
         members[member] = {
           devScores: [],
           reportScores: [],
+          devEntries: [],
+          reportEntries: [],
           devComments: [],
           reportComments: []
         };
@@ -237,9 +334,11 @@ function buildDashboard(data) {
 
       if (row["Dev Value"] !== null && row["Dev Value"] !== undefined) {
         members[member].devScores.push(row["Dev Value"]);
+        members[member].devEntries.push({ reviewer: row["Reviewer"], score: row["Dev Value"] });
       }
       if (row["Report Value"] !== null && row["Report Value"] !== undefined) {
         members[member].reportScores.push(row["Report Value"]);
+        members[member].reportEntries.push({ reviewer: row["Reviewer"], score: row["Report Value"] });
       }
       if (row["Dev Comments"]) members[member].devComments.push(row["Dev Comments"]);
       if (row["Report Comments"]) members[member].reportComments.push(row["Report Comments"]);
@@ -254,6 +353,8 @@ function buildDashboard(data) {
       reportAvg: avg(members[member].reportScores),
       devScores: members[member].devScores,
       reportScores: members[member].reportScores,
+      devEntries: members[member].devEntries,
+      reportEntries: members[member].reportEntries,
       devComments: members[member].devComments,
       reportComments: members[member].reportComments
     }));
@@ -283,6 +384,13 @@ function buildDashboard(data) {
     chartShell.className = "chart-shell";
     chartPanel.appendChild(chartShell);
     renderGroupChart(chartShell, memberData, expected);
+
+    const histogramStack = document.createElement("div");
+    histogramStack.className = "histogram-stack";
+    histogramStack.appendChild(buildHistogramBlock("Dev score distribution", memberData.flatMap(member => member.devScores), DEV_COLOR));
+    histogramStack.appendChild(buildHistogramBlock("Report score distribution", memberData.flatMap(member => member.reportScores), REPORT_COLOR));
+    chartPanel.appendChild(histogramStack);
+
     chartPanel.appendChild(buildLegend());
 
     const commentsPanel = document.createElement("div");
@@ -306,6 +414,7 @@ function renderGroupChart(container, memberData, expected) {
   const height = margin.top + margin.bottom + memberData.length * rowHeight;
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
+  const xDomain = getCenteredDomain(memberData, expected);
 
   const svg = d3.select(container)
     .append("svg")
@@ -329,12 +438,12 @@ function renderGroupChart(container, memberData, expected) {
     .padding(0.28);
 
   const x = d3.scaleLinear()
-    .domain([0, 100])
+    .domain(xDomain)
     .range([0, innerWidth]);
 
   root.append("g")
     .selectAll("line")
-    .data(d3.range(0, 101, 20))
+    .data(x.ticks(6))
     .join("line")
     .attr("class", "grid-line")
     .attr("x1", d => x(d))
@@ -345,7 +454,7 @@ function renderGroupChart(container, memberData, expected) {
   root.append("g")
     .attr("class", "chart-axis")
     .attr("transform", `translate(0,${innerHeight})`)
-    .call(d3.axisBottom(x).ticks(5).tickFormat(d => `${d}`));
+    .call(d3.axisBottom(x).ticks(6).tickFormat(d => `${d}`));
 
   root.append("g")
     .attr("class", "chart-axis")
@@ -383,11 +492,88 @@ function renderGroupChart(container, memberData, expected) {
     .attr("y", () => yInner("reportScores") + yInner.bandwidth() / 2 + 4)
     .text("Rpt");
 
-  drawDistributionLane(groups, x, yInner, "devScores", "devAvg", DEV_COLOR);
-  drawDistributionLane(groups, x, yInner, "reportScores", "reportAvg", REPORT_COLOR);
+  drawDistributionLane(groups, x, yInner, "devScores", "devAvg", DEV_COLOR, xDomain[1]);
+  drawDistributionLane(groups, x, yInner, "reportScores", "reportAvg", REPORT_COLOR, xDomain[1]);
 }
 
-function drawDistributionLane(groups, x, yInner, scoresKey, avgKey, color) {
+function buildHistogramBlock(titleText, scores, color) {
+  const block = document.createElement("div");
+  block.className = "histogram-block";
+
+  const title = document.createElement("p");
+  title.className = "histogram-title";
+  title.textContent = titleText;
+  block.appendChild(title);
+
+  const shell = document.createElement("div");
+  shell.className = "chart-shell";
+  block.appendChild(shell);
+
+  renderHistogram(shell, scores, color, titleText);
+  return block;
+}
+
+function renderHistogram(container, scores, color, label) {
+  const margin = { top: 8, right: 20, bottom: 28, left: 38 };
+  const width = 860;
+  const height = 150;
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const bins = d3.bin()
+    .domain([0, 100])
+    .thresholds(d3.range(0, 110, 10))(scores);
+
+  const x = d3.scaleLinear()
+    .domain([0, 100])
+    .range([0, innerWidth]);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(bins, bin => bin.length) || 1])
+    .nice()
+    .range([innerHeight, 0]);
+
+  const svg = d3.select(container)
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("role", "img")
+    .attr("aria-label", label);
+
+  const root = svg.append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  root.append("g")
+    .selectAll("line")
+    .data(y.ticks(Math.min(4, y.domain()[1] || 1)))
+    .join("line")
+    .attr("class", "grid-line")
+    .attr("x1", 0)
+    .attr("x2", innerWidth)
+    .attr("y1", d => y(d))
+    .attr("y2", d => y(d));
+
+  root.selectAll("rect")
+    .data(bins)
+    .join("rect")
+    .attr("class", "hist-bar")
+    .attr("x", bin => x(bin.x0) + 1)
+    .attr("y", bin => y(bin.length))
+    .attr("width", bin => Math.max(0, x(bin.x1) - x(bin.x0) - 2))
+    .attr("height", bin => innerHeight - y(bin.length))
+    .attr("fill", color);
+
+  root.append("g")
+    .attr("class", "chart-axis")
+    .attr("transform", `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(10).tickFormat(d => `${d}`));
+
+  root.append("g")
+    .attr("class", "chart-axis")
+    .call(d3.axisLeft(y).ticks(Math.min(4, y.domain()[1] || 1)).tickFormat(d3.format("d")));
+}
+
+function drawDistributionLane(groups, x, yInner, scoresKey, avgKey, color, domainMax) {
   groups.append("line")
     .attr("class", "range-line")
     .attr("stroke", color)
@@ -404,23 +590,46 @@ function drawDistributionLane(groups, x, yInner, scoresKey, avgKey, color) {
     .attr("y2", () => yInner(scoresKey) + yInner.bandwidth());
 
   groups.selectAll(`circle.${scoresKey}`)
-    .data(d => d[scoresKey].map(score => ({ score, avg: d[avgKey] })))
+    .data(d => d[scoresKey.replace("Scores", "Entries")].map(entry => ({
+      reviewer: entry.reviewer,
+      score: entry.score,
+      avg: d[avgKey],
+      member: d.member,
+      lane: scoresKey === "devScores" ? "Dev" : "Report"
+    })))
     .join("circle")
     .attr("class", "review-dot")
     .attr("cx", d => x(d.score))
     .attr("cy", () => yInner(scoresKey) + yInner.bandwidth() / 2)
     .attr("r", 4.5)
-    .attr("fill", color);
+    .attr("fill", color)
+    .on("mouseenter", function(event, d) {
+      showChartTooltip(event, `${d.reviewer}<br>${d.lane}: ${d.score}`);
+    })
+    .on("mousemove", function(event, d) {
+      showChartTooltip(event, `${d.reviewer}<br>${d.lane}: ${d.score}`);
+    })
+    .on("mouseleave", hideChartTooltip);
 
   groups.append("text")
     .attr("class", "summary-label")
-    .attr("x", x(100) + 10)
+    .attr("x", x(domainMax) + 10)
     .attr("y", () => yInner(scoresKey) + yInner.bandwidth() / 2 + 4)
     .text(d => {
       const min = d3.min(d[scoresKey]);
       const max = d3.max(d[scoresKey]);
       return `${d[avgKey].toFixed(1)} avg | ${min}-${max}`;
     });
+}
+
+function getCenteredDomain(memberData, expected) {
+  const allScores = memberData.flatMap(member => [...member.devScores, ...member.reportScores]);
+  const minScore = d3.min(allScores);
+  const maxScore = d3.max(allScores);
+  const leftSpan = expected - minScore;
+  const rightSpan = maxScore - expected;
+  const span = Math.max(leftSpan, rightSpan, 1);
+  return [expected - span, expected + span];
 }
 
 function buildLegend() {
@@ -474,6 +683,9 @@ function buildMemberCommentsBlock(member) {
   heading.textContent = `${member.member} - Dev Avg: ${member.devAvg.toFixed(1)}, Report Avg: ${member.reportAvg.toFixed(1)}`;
   block.appendChild(heading);
 
+  const copyButton = buildCopyCommentsButton(member);
+  block.appendChild(copyButton);
+
   const columns = document.createElement("div");
   columns.className = "comment-columns";
   columns.appendChild(buildCommentColumn("Dev Comments", member.devComments));
@@ -509,8 +721,102 @@ function buildCommentColumn(labelText, comments) {
   return column;
 }
 
+function buildCopyCommentsButton(member) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "copy-comments-button";
+  button.title = "Copy anonymized comments";
+  button.setAttribute("aria-label", `Copy comments for ${member.member}`);
+  button.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+  `;
+
+  button.addEventListener("click", async () => {
+    const text = formatCommentsForClipboard(member);
+    try {
+      await navigator.clipboard.writeText(text);
+      const previousTitle = button.title;
+      button.classList.add("copied");
+      button.title = "Copied";
+      setTimeout(() => {
+        button.classList.remove("copied");
+        button.title = previousTitle;
+      }, 1200);
+    } catch (error) {
+      button.title = "Clipboard unavailable";
+    }
+  });
+
+  return button;
+}
+
+function formatCommentsForClipboard(member) {
+  const lines = [
+    `${member.member}`,
+    `Dev Avg: ${member.devAvg.toFixed(1)}`,
+    `Report Avg: ${member.reportAvg.toFixed(1)}`,
+    "",
+    "Development Comments"
+  ];
+
+  if (member.devComments.length) {
+    member.devComments.forEach(comment => lines.push(`- ${comment}`));
+  } else {
+    lines.push("- No comments provided.");
+  }
+
+  lines.push("", "Report Comments");
+
+  if (member.reportComments.length) {
+    member.reportComments.forEach(comment => lines.push(`- ${comment}`));
+  } else {
+    lines.push("- No comments provided.");
+  }
+
+  return lines.join("\n");
+}
+
 function avg(arr) {
   return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+}
+
+function getChartTooltip() {
+  if (!chartTooltip) {
+    chartTooltip = document.createElement("div");
+    chartTooltip.className = "chart-tooltip";
+    document.body.appendChild(chartTooltip);
+  }
+  return chartTooltip;
+}
+
+function showChartTooltip(event, html) {
+  const tooltip = getChartTooltip();
+  tooltip.innerHTML = html;
+  tooltip.classList.add("visible");
+
+  const offsetX = 14;
+  const offsetY = 14;
+  const rect = tooltip.getBoundingClientRect();
+  let left = event.clientX + offsetX;
+  let top = event.clientY + offsetY;
+
+  if (left + rect.width > window.innerWidth - 8) {
+    left = event.clientX - rect.width - offsetX;
+  }
+  if (top + rect.height > window.innerHeight - 8) {
+    top = event.clientY - rect.height - offsetY;
+  }
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function hideChartTooltip() {
+  if (!chartTooltip) return;
+  chartTooltip.classList.remove("visible");
 }
 
 function renderStatus(acceptedFiles, rejectedFiles, totalRows) {
