@@ -23,11 +23,16 @@
         }
 
 
-        input[type="text"] {
+        textarea.comment-box {
             width: 100%;  /* Make the input fill the available width */
             padding: 8px;  /* Add some padding for better readability */
             font-size: 14px;  /* Set a comfortable font size */
             box-sizing: border-box;  /* Ensure padding doesn't overflow the input */
+            resize: vertical;
+            min-height: 72px;
+            font-family: Arial, sans-serif;
+            line-height: 1.4;
+            overflow-y: hidden;
         }
 
         /* Styling for disabled export button */
@@ -59,7 +64,7 @@
     that you are providing meaningful explanations for your ratings, especially for scores that deviate significantly from
     the expected value. Submissions with mostly copy-pasted or empty boxes will be not be accepted and will result in a zero.</p>
 
-    <p>Please upload the CSV provided to you. The file must have the first column of names (use underscore instead of spaces) and the second column of groups.</p>
+    <p>Please upload the CSV provided to you. The file must have the first column of names and the second column of groups.</p>
 
     <!-- CSV Upload -->
     <label for="csvUpload">Upload CSV:</label>
@@ -93,13 +98,18 @@
         <tbody id="tableBody">
             <!-- Rows will be inserted here by JavaScript -->
         </tbody>
+        <tfoot>
+            <tr>
+                <td><strong>Totals</strong></td>
+                <td></td>
+                <td><strong id="devTotal">0</strong></td>
+                <td></td>
+                <td><strong id="reportTotal">0</strong></td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tfoot>
     </table>
-    <div style="margin-top: 20px;">
-        <strong>Dev Total: </strong><span id="devTotal">0</span>
-    </div>
-    <div>
-        <strong>Report Total: </strong><span id="reportTotal">0</span>
-    </div>
     <div id="validationMessage" style="margin-top: 10px; color: #b00020;"></div>
 
     <button id="exportButton" style="margin-top: 20px;" disabled>Export as CSV</button>

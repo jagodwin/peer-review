@@ -14,6 +14,6 @@ Files in this directory:
 Suggested test flow:
 
 1. Upload the four `valid_*.csv` files together.
-2. Confirm all four are accepted and charts render for groups `group_a`, `group_b`, and `group_c`.
+2. Confirm all four are accepted and charts render for groups `Group A`, `Group B`, and `Group C`.
 3. Confirm zero values are included correctly from `valid_group_a_percy.csv`.
 4. Upload the `invalid_*.csv` files and confirm the status panel rejects them with readable reasons.

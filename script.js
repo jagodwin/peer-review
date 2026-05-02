@@ -54,6 +54,7 @@ $(document).ready(function() {
         const reviewer = $(this).val();
         const members = groupMap[group] || [];
         const tableBody = $('#tableBody');
+        const expectedValue = members.length > 0 ? Math.floor(100 / members.length) : 0;
 
         if (!reviewer) {
             tableBody.empty();
@@ -63,18 +64,22 @@ $(document).ready(function() {
         }
 
         if (members.length > 0 && tableBody.children().length === 0) {
-            members.forEach(member => {
+            members.forEach((member, index) => {
                 tableBody.append(`
                     <tr>
                         <td>${member}</td>
-                        <td><input type="range" min="0" max="100" value="0" class="slider dev-slider" data-member="${member}"></td>
-                        <td><span class="dev-value" id="devValue-${member}">0</span></td>
-                        <td><input type="range" min="0" max="100" value="0" class="slider report-slider" data-member="${member}"></td>
-                        <td><span class="report-value" id="reportValue-${member}">0</span></td>
-                        <td><input type="text" placeholder="Dev Comments" name="devComment-${member}" class="comment-box"></td>
-                        <td><input type="text" placeholder="Report Comments" name="reportComment-${member}" class="comment-box"></td>
+                        <td><input type="range" min="0" max="100" value="${expectedValue}" class="slider dev-slider" data-row-index="${index}" data-default="${expectedValue}" tabindex="-1"></td>
+                        <td><span class="dev-value">${expectedValue}</span></td>
+                        <td><input type="range" min="0" max="100" value="${expectedValue}" class="slider report-slider" data-row-index="${index}" data-default="${expectedValue}" tabindex="-1"></td>
+                        <td><span class="report-value">${expectedValue}</span></td>
+                        <td><textarea placeholder="Dev Comments" name="devComment-${member}" class="comment-box" rows="3"></textarea></td>
+                        <td><textarea placeholder="Report Comments" name="reportComment-${member}" class="comment-box" rows="3"></textarea></td>
                     </tr>
                 `);
+            });
+
+            $('.comment-box').each(function() {
+                autosizeCommentBox(this);
             });
         }
 
@@ -83,18 +88,18 @@ $(document).ready(function() {
     });
 
     $(document).on('input', '.slider', function() {
-        const member = $(this).data('member');
+        const row = $(this).closest('tr');
         if ($(this).hasClass('dev-slider')) {
-            $(`#devValue-${member}`).text($(this).val());
+            row.find('.dev-value').text($(this).val());
         } else {
-            $(`#reportValue-${member}`).text($(this).val());
+            row.find('.report-value').text($(this).val());
         }
         updateTotals();
     });
 
     $(document).on('input', '.comment-box', function() {
-        this.value = this.value.replace(/\r?\n/g, ' ');
         if (this.value.length > 500) this.value = this.value.slice(0, 500);
+        autosizeCommentBox(this);
         updateExportState();
     });
 
@@ -130,8 +135,8 @@ $(document).ready(function() {
                 $(cols[0]).text(),
                 $(cols[1]).find('input').val(),
                 $(cols[3]).find('input').val(),
-                $(cols[5]).find('input').val(),
-                $(cols[6]).find('input').val()
+                $(cols[5]).find('.comment-box').val(),
+                $(cols[6]).find('.comment-box').val()
             ].map(formatCSVField);
             csvRows.push(row.join(','));
         });
@@ -165,6 +170,7 @@ $(document).ready(function() {
 
         if (!group || !reviewer || memberRows.length === 0) return false;
         if (devTotal !== 100 || reportTotal !== 100) return false;
+        if (isDefaultAllocation()) return false;
 
         let allCommentsPresent = true;
         memberRows.each(function() {
@@ -199,10 +205,28 @@ $(document).ready(function() {
         }
         if (devTotal !== 100) issues.push(`Dev total must equal 100. Current total: ${devTotal}.`);
         if (reportTotal !== 100) issues.push(`Report total must equal 100. Current total: ${reportTotal}.`);
+        if (memberRows.length > 0 && isDefaultAllocation()) {
+            issues.push('Adjust at least one score away from the default equal-share allocation before exporting.');
+        }
 
         const isValid = issues.length === 0 && isSubmissionValid();
         $('#exportButton').prop('disabled', !isValid);
         messageEl.text(isValid ? 'Submission is ready to export.' : issues.join(' '));
         messageEl.css('color', isValid ? '#1b5e20' : '#b00020');
+    }
+
+    function isDefaultAllocation() {
+        const devSliders = $('.dev-slider').toArray();
+        const reportSliders = $('.report-slider').toArray();
+        if (devSliders.length === 0 || reportSliders.length === 0) return false;
+
+        const devUnchanged = devSliders.every(slider => slider.value === slider.dataset.default);
+        const reportUnchanged = reportSliders.every(slider => slider.value === slider.dataset.default);
+        return devUnchanged && reportUnchanged;
+    }
+
+    function autosizeCommentBox(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${textarea.scrollHeight}px`;
     }
 });
