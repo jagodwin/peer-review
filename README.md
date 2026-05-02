@@ -5,6 +5,11 @@ This design assumes that each deliverable includes some amount of code developme
 
 Once you have received all submissions, you can review them through the dashboard at https://jagodwin.github.io/peer-review/analyze_reviews.html. This doesn't upload anything to a server, it uses javascript to create charts of the assigned scores in your own browser. 
 
+## Links
+
+- **Student review form:** https://jagodwin.github.io/peer-review/
+- **Instructor analysis dashboard:** https://jagodwin.github.io/peer-review/analyze_reviews.html
+
 ## Sample Assignment Description
 
 > For each of the estimates of effort in the survey, you and your teammates must SUM to 100. Do not put 100 for everyone for everything. There are only 100 points to go around, total, for each question. Think about it like this. You can pay your team \$100 total for development, and \$100 for their work on the report. That's it. So who gets paid what?
@@ -23,7 +28,9 @@ Once you have received all submissions, you can review them through the dashboar
 >
 > But, what I'd estimate is much more likely, is that the split would be uneven....
 >
-> Please use the tool at: https://jagodwin.github.io/peer-review/
+> Please use the tool at:
+>
+> **https://jagodwin.github.io/peer-review/**
 >
 > Upload the csv file I provided to you, and use the tool to set your review scores. Export the review csv and submit it here.
 >
