@@ -3,7 +3,7 @@ This is a web tool to aid with class peer reviews during software engineering gr
 
 This design assumes that each deliverable includes some amount of code development and some amount of reporting. I tend to vary the weights when assigning grades, as early deliverables have more report and less dev, later and final deliverables have less report and more dev.
 
-Once you have received all submissions, you can review them through the dashboard at https://jagodwin.github.io/peer-review/analyze_reviews.html. This doesn't upload anything to a server, it uses javascript to create charts of the assigned scores in your own browser. 
+Once you have received all submissions, you can review them through the dashboard. This doesn't upload anything to a server, it uses javascript to create charts of the assigned scores in your own browser. 
 
 ## Links
 
