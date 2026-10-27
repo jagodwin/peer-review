@@ -1,0 +1,34 @@
+.github-corner {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+}
+
+.github-corner a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+}
+
+.github-corner img {
+    display: block;
+}
+
+.github-corner a:hover,
+.github-corner a:focus-visible {
+    background: #e5e7eb;
+}
+
+.github-corner a:focus-visible {
+    outline: 3px solid #0969da;
+    outline-offset: 3px;
+}
+
+body > h1:first-of-type,
+body > h2:first-of-type {
+    padding-right: 52px;
+}
